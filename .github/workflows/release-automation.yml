@@ -131,6 +131,7 @@ jobs:
           path: zip-check/aws-iot-device-sdk-embedded-C-${{ github.event.inputs.version_number }}.zip
   deploy-docs:
     needs: tag-commit
+    if: ${{ ( github.event.inputs.delete_existing_tag_release == 'true' && success() ) || ( github.event.inputs.delete_existing_tag_release == 'false' && always() ) }}
     name: Deploy doxygen docs
     runs-on: ubuntu-20.04
     steps:
@@ -139,6 +140,25 @@ jobs:
         with:
           ref: ${{ github.event.inputs.version_number }}
           add_release: "true"
+          generate_command: |
+            git submodule update --init --depth 1
+            if python3 tools/doxygen/generate_docs.py --root . ; then
+              find * -type d -wholename '*/doxygen/output' -exec mkdir -p html/{} \; -exec mv {}/html html/{} \;
+              cat << END > html/index.html
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta http-equiv="refresh" content="0; url='docs/doxygen/output/html'" />
+              </head>
+              <body>
+                <p><a href="docs/doxygen/output/html">Click here if page does not redirect.</a></p>
+              </body>
+            </html>
+            END
+            else
+              exit 1
+            fi
+          output_dir: html
   create-release:
     needs:
       - create-zip
