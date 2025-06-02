@@ -408,5 +408,7 @@ int main( int argc,
     /* End TLS session, then close TCP connection. */
     ( void ) Openssl_Disconnect( &networkContext );
 
+    fflush( stdout );
+
     return returnStatus;
 }
