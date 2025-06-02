@@ -58,11 +58,6 @@
     #error "Please define a POST_PATH."
 #endif
 
-/**
- * @brief Delay in seconds between each iteration of the demo.
- */
-#define DEMO_LOOP_DELAY_SECONDS    ( 5U )
-
 /* Check that a path for Root CA certificate is defined. */
 #ifndef ROOT_CA_CERT_PATH
     #error "Please define a ROOT_CA_CERT_PATH."
@@ -112,11 +107,6 @@
  * @brief Length of the request body.
  */
 #define REQUEST_BODY_LENGTH        ( sizeof( REQUEST_BODY ) - 1 )
-
-/**
- * @brief Number of HTTP paths to request.
- */
-#define NUMBER_HTTP_PATHS          ( 4 )
 
 /**
  * @brief A buffer used in the demo for storing HTTP request headers and
@@ -362,76 +352,61 @@ int main( int argc,
     /* Set the pParams member of the network context with desired transport. */
     networkContext.pParams = &opensslParams;
 
-    for( ; ; )
+    /**************************** Connect. ******************************/
+
+    /* Establish TLS connection on top of TCP connection using OpenSSL. */
+    if( returnStatus == EXIT_SUCCESS )
     {
-        int i = 0;
+        LogInfo( ( "Performing TLS handshake on top of the TCP connection." ) );
 
-        /**************************** Connect. ******************************/
+        /* Attempt to connect to the HTTP server. If connection fails, retry after
+         * a timeout. Timeout value will be exponentially increased till the maximum
+         * attempts are reached or maximum timeout value is reached. The function
+         * returns EXIT_FAILURE if the TCP connection cannot be established to
+         * broker after configured number of attempts. */
+        returnStatus = connectToServerWithBackoffRetries( connectToServer,
+                                                          &networkContext );
 
-        /* Establish TLS connection on top of TCP connection using OpenSSL. */
-        if( returnStatus == EXIT_SUCCESS )
+        if( returnStatus == EXIT_FAILURE )
         {
-            LogInfo( ( "Performing TLS handshake on top of the TCP connection." ) );
-
-            /* Attempt to connect to the HTTP server. If connection fails, retry after
-             * a timeout. Timeout value will be exponentially increased till the maximum
-             * attempts are reached or maximum timeout value is reached. The function
-             * returns EXIT_FAILURE if the TCP connection cannot be established to
-             * broker after configured number of attempts. */
-            returnStatus = connectToServerWithBackoffRetries( connectToServer,
-                                                              &networkContext );
-
-            if( returnStatus == EXIT_FAILURE )
-            {
-                /* Log error to indicate connection failure after all
-                 * reconnect attempts are over. */
-                LogError( ( "Failed to connect to HTTP server %.*s.",
-                            ( int32_t ) AWS_IOT_ENDPOINT_LENGTH,
-                            AWS_IOT_ENDPOINT ) );
-            }
+            /* Log error to indicate connection failure after all
+             * reconnect attempts are over. */
+            LogError( ( "Failed to connect to HTTP server %.*s.",
+                        ( int32_t ) AWS_IOT_ENDPOINT_LENGTH,
+                        AWS_IOT_ENDPOINT ) );
         }
-
-        /* Define the transport interface. */
-        if( returnStatus == EXIT_SUCCESS )
-        {
-            ( void ) memset( &transportInterface, 0, sizeof( transportInterface ) );
-            transportInterface.recv = Openssl_Recv;
-            transportInterface.send = Openssl_Send;
-            transportInterface.pNetworkContext = &networkContext;
-        }
-
-        /*********************** Send HTTPS requests. ************************/
-
-        for( i = 0; i < NUMBER_HTTP_PATHS; i++ )
-        {
-            if( returnStatus == EXIT_SUCCESS )
-            {
-                returnStatus = sendHttpRequest( &transportInterface,
-                                                HTTP_METHOD_POST,
-                                                HTTP_METHOD_POST_LENGTH,
-                                                POST_PATH,
-                                                POST_PATH_LENGTH );
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        if( returnStatus == EXIT_SUCCESS )
-        {
-            /* Log message indicating an iteration completed successfully. */
-            LogInfo( ( "Demo completed successfully." ) );
-        }
-
-        /************************** Disconnect. *****************************/
-
-        /* End TLS session, then close TCP connection. */
-        ( void ) Openssl_Disconnect( &networkContext );
-
-        LogInfo( ( "Short delay before starting the next iteration....\n" ) );
-        sleep( DEMO_LOOP_DELAY_SECONDS );
     }
+
+    /* Define the transport interface. */
+    if( returnStatus == EXIT_SUCCESS )
+    {
+        ( void ) memset( &transportInterface, 0, sizeof( transportInterface ) );
+        transportInterface.recv = Openssl_Recv;
+        transportInterface.send = Openssl_Send;
+        transportInterface.pNetworkContext = &networkContext;
+    }
+
+    /*********************** Send HTTPS request. ************************/
+
+    if( returnStatus == EXIT_SUCCESS )
+    {
+        returnStatus = sendHttpRequest( &transportInterface,
+                                        HTTP_METHOD_POST,
+                                        HTTP_METHOD_POST_LENGTH,
+                                        POST_PATH,
+                                        POST_PATH_LENGTH );
+    }
+
+    if( returnStatus == EXIT_SUCCESS )
+    {
+        /* Log message indicating an iteration completed successfully. */
+        LogInfo( ( "Demo completed successfully." ) );
+    }
+
+    /************************** Disconnect. *****************************/
+
+    /* End TLS session, then close TCP connection. */
+    ( void ) Openssl_Disconnect( &networkContext );
 
     return returnStatus;
 }
