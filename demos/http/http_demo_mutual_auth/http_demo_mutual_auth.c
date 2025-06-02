@@ -408,7 +408,8 @@ int main( int argc,
     /* End TLS session, then close TCP connection. */
     ( void ) Openssl_Disconnect( &networkContext );
 
-    fflush( stdout );
+    /* Sleep for a while so that CI gets the complete output. */
+    sleep( 5 );
 
     return returnStatus;
 }
